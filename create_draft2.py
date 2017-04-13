@@ -10,7 +10,7 @@ logger = logging.getLogger('my_log')
 logger.setLevel(logging.DEBUG)
 # create file handler which logs even debug messages
 fh = logging.FileHandler('draft2.log')
-fh.setLevel(logging.DEBUG)
+fh.setLevel(logging.INFO)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
 ch.setLevel(logging.ERROR)
@@ -24,8 +24,9 @@ logger.addHandler(ch)
 
 
 # DK_SALARIES_FILE = 'Input/DKSalaries_Debug.csv'
-DK_SALARIES_FILE = 'Input/DKSalaries.csv'
+DK_SALARIES_FILE = config['dk_salary_filename']
 
+# TODO update q table so that players only have states with eligible positions ie. Lebron James(SF) can't be a PG, this will speed up processing time
 
 class CreateDraft():
     def __init__(self, dk_data, dk_lineup):
@@ -36,7 +37,8 @@ class CreateDraft():
         }
 
         """
-        self.action_list = ['add_player', 'dont_add_player']
+        # self.action_list = ['add_player', 'dont_add_player']
+        self.action_list = ['add_player']
         self.dk_data = dk_data  # pd.DataFrame of draft kings salary
         self.dk_lineup = dk_lineup  # desired lineup to input into draft kings, ['PG', 'SG', 'Util']
         # stateList = ['PG|add_player', 'PG|dont_add_player', 'C|add_player']
@@ -46,8 +48,8 @@ class CreateDraft():
         # Equation for updating q values: Q(s,a) < - Q(s,a) + alpha[reward + gamma(Q(s', a')) - Q(s,a)]
         self.initial_q_value = 1.0
         self.epsilon = 0.3  # variable for randomness, 0.0 = no random actions taken; 1.0 = random action always taken
-        self.alpha = 1.0  # learning rate, ie to what extent the newly acquired information will override the old information, alpha = 0.0 agent doesn't learn anything, alpha = 1.0 agent only considers most recent info
-        self.gamma = 0.0  # discount factor, determines importance of future rewards, gamma = 0 only considers current rewards, gamma = 1.0 will strive for long term rewards
+        self.alpha = 0.5  # learning rate, ie to what extent the newly acquired information will override the old information, alpha = 0.0 agent doesn't learn anything, alpha = 1.0 agent only considers most recent info
+        self.gamma = 0.00  # discount factor, determines importance of future rewards, gamma = 0 only considers current rewards, gamma = 1.0 will strive for long term rewards
 
         self.previousPlayer = self.dk_data['Name'].sample(1).values[0]
         self.previousAction = self.stateList[0]
@@ -67,7 +69,7 @@ class CreateDraft():
         for position in self.dk_lineup:
             try:
                 if position != 'Util':
-                    lineup.update({position: df[df['Position'].str.contains('SF')]['Name'].sample(1).values[0]})
+                    lineup.update({position: df['Name'].sample(1).values[0]})
                 else:
                     lineup.update({'Util': df['Name'].sample(1).values[0]})
             except ValueError:
@@ -96,8 +98,9 @@ class CreateDraft():
             else:
                 qtable[name] = {state: self.initial_q_value for state in self.stateList}
 
-        logger.debug('QTable')
-        logger.debug(qtable)
+        if config['log_qtable'] is True:
+            logger.debug('Initial QTable')
+            logger.debug(qtable)
 
         return qtable
 
@@ -120,33 +123,47 @@ class CreateDraft():
         # returns summed lineup_score, total salary cap, and expected total points
         return lineup_score, filtered_lineup.sum()['Salary'], filtered_lineup.sum()['AvgPointsPerGame']
 
-    def calculate_reward(self, old_lineup, new_lineup):
+    def calculate_reward(self, old_lineup, new_lineup, player_name):
 
         old_line_score, _, _ = self.calculate_lineup_score(old_lineup)
-        new_lineup_score, _, _ = self.calculate_lineup_score(new_lineup)
+        new_lineup_score, new_lineup_salary, _ = self.calculate_lineup_score(new_lineup)
 
         reward = new_lineup_score - old_line_score
 
-        # TODO add negative-reward if salary goes above $50k
-        # TODO add negative-reward for adding player in incorrect position
+        # Adds negative-reward if salary cap goes above $50k
+        if new_lineup_salary > 50000.0:
+            reward += -1 * (new_lineup_salary - 50000.0)
+        elif new_lineup_salary > 45000.0 and new_lineup_salary <= 50000.0:
+            reward += 50000.0 - new_lineup_salary
+        elif new_lineup_salary < 40000:
+            reward += -1000.0
+
+        # Adds negative-reward for adding player in incorrect position
+        dk_player_position = self.dk_data.query('Name == "{}"'.format(player_name)).Position.values[0]  # allocated position in draft kings
+        for position, player in new_lineup.iteritems():
+            if player == player_name:
+
+                if position != 'Util':
+                    if position not in dk_player_position:
+                        reward += -100000
+
+
         return reward
 
-    def execute_action(self, player_name, action):
+    def execute_action(self, player_name, action, lineup):
         """
-        updates self.optimized_lineup based on action and player
+        calculates difference in reward when performing action, however the overall lineup is not modified
         """
-        old_lineup = self.optimized_lineup.copy()
-
-        logger.debug('Start Executing Action')
+        old_lineup = lineup.copy()
+        new_lineup = lineup.copy()
 
         position = action.split('|')[0]
         if '|add_player' in action:
-            logger.debug('{} - {}'.format(player_name, action))
-
-            if player_name not in self.optimized_lineup.values():
-                self.optimized_lineup[position] = player_name
-            else:
-                logger.debug('Duplicate player found, but not added - {}'.format(player_name))
+            new_lineup[position] = player_name
+            # if player_name not in new_lineup.values():
+            #     new_lineup[position] = player_name
+            # else:
+            #     logger.debug('Duplicate player found, but not added - {}'.format(player_name))
 
         elif '|dont_add_player' in action:
             logger.debug('{} - {}'.format(player_name, action))
@@ -154,9 +171,8 @@ class CreateDraft():
         else:
             raise ValueError('Incorrect Action')
 
-        logger.debug('Done Executing Action')
+        reward = self.calculate_reward(old_lineup=old_lineup, new_lineup=new_lineup, player_name=player_name)
 
-        reward = self.calculate_reward(old_lineup=old_lineup, new_lineup=self.optimized_lineup)
         return reward
 
     def update_qtable(self):
@@ -164,48 +180,80 @@ class CreateDraft():
         # Updates the QTable as we iterate through all the players
         # new_player is pd.Series object, ex. new_player['Name'] == 'Lebron James'
 
-        # TODO options for updating q table
-        # TODO option 1: as we iterate through DKSalaries, search through entire qtable and add only players with best score in q table, pros: ; cons: new players less likely to be added
-        # TODO option 2: have temporary qtable where we update all the players, then after looping through entire draft select players that maximize q table
-        # TODO option 3:
-        logger.info('Updating QTable')
+        logger.debug('Updating QTable')
+        temporary_lineup = self.optimized_lineup.copy()
         for index, new_player in self.dk_data.iterrows():
 
             randNumber = np.random.uniform(low=0.0, high=1.0)
 
             # Select action with maximum Q value if less than epsilon, otherwise choose random action
             if randNumber > self.epsilon:  # do normal routine
-                # TODO search qtable for all players with highest q value for a position, instead of iterating through lineup
-                # TODO Do above, current procedure adds last set of people in DKSalaries.csv
                 action = max(self.qtable[new_player['Name']], key=self.qtable[new_player['Name']].get)
             else: # do random routine
                 logger.debug('Did Something Random')
                 action = random.choice(self.stateList)
 
             # Execute action and get reward
-            # TODO add if statement; if player in self.optimized_lineup skip and don't update q table
-            reward = self.execute_action(new_player['Name'], action)
+            reward = self.execute_action(new_player['Name'], action, temporary_lineup)
 
             logger.debug("round:{:<5} - player:{:<20} - action:{:<20} - randNumber:{:<20} - reward:{:<20}".format(self.current_round, new_player['Name'], action, randNumber, reward))
 
             # Update Q Table based on the following eq: Q(s,a) < - Q(s,a) + alpha[reward + gamma(Q(s', a')) - Q(s,a)]
-            self.qtable[self.previousPlayer][self.previousAction] = self.qtable[self.previousPlayer][self.previousAction] + self.alpha * (reward + self.gamma * (self.qtable[new_player['Name']][action] - self.qtable[self.previousPlayer][self.previousAction] ))
+            self.qtable[self.previousPlayer][self.previousAction] = self.qtable[self.previousPlayer][self.previousAction] + self.alpha * (self.previousReward + self.gamma * (self.qtable[new_player['Name']][action] - self.qtable[self.previousPlayer][self.previousAction] ))
 
-            logger.debug('qtable: {}'.format(self.qtable))
+            if config['log_qtable'] is True:
+                logger.debug('qtable: {}'.format(self.qtable))
 
             # Update States
             self.previousPlayer = new_player['Name']
             self.previousAction = action
             self.previousReward = reward
 
+    def check_player_in_temp_lineup(self, player_name, temp_lineup):
+        """
+        player_name = 'Seth Curry'
+        temp_lineup = {'C': ('Seth Curry', 123),
+                         'PG': ('Justin Holiday', 456),
+                         'SG': ('Festus Ezeli', 456),
+                         'Util': ('Wesley Matthews', 456)}
+        """
+        for position, (player, qscore) in temp_lineup.iteritems():
+            if player_name == player:
+                return True
+        return False
+
     def optimize_lineup(self):
         # TODO after each loop, update self.alpha
         for current_round in range(config['learning_rounds']):
             self.current_round = current_round
             self.update_qtable()
-            print self.optimized_lineup, self.calculate_lineup_score(self.optimized_lineup)
-            logger.info('lineup:{} - score:{}'.format(self.optimized_lineup, self.calculate_lineup_score(self.optimized_lineup)))
 
+            #  uses updated qtable and finds optimum lineup based on max value of q table for each position
+            # TODO breakup below into separate function: def find_best_lineup(self):
+            temp_lineup = {}
+            for position in self.dk_lineup:  # ex. ['PG', 'C', 'SG', 'Util']
+                temp_lineup.update({position: (None, None)})  # initializes temp_lineup with position and empty player and q value
+                for player, state_dict in self.qtable.iteritems():  # ex. 'Marshall Plumlee': {'PG|dont_add_player': 0.0, 'Util|dont_add_player': 0.1}
+
+                    if self.check_player_in_temp_lineup(player, temp_lineup):
+                        logger.debug('Player Already In Lineup. Player: {} - Lineup: {}'.format(player, temp_lineup.values()))
+                    else:
+                        for state, qvalue in state_dict.iteritems():
+                                if position == 'Util' and qvalue > temp_lineup[position][1] and '|add_player' in state:
+                                    temp_lineup.update({position: (player, qvalue)})
+                                elif position in state and qvalue > temp_lineup[position][1] and '|add_player' in state:
+                                    temp_lineup.update({position: (player, qvalue)})
+
+            optimized_lineup = {}
+            for position, player in temp_lineup.iteritems():
+                optimized_lineup.update({position: player[0]})
+
+            self.optimized_lineup = optimized_lineup
+
+            print 'round: {} - lineup:{} - score:{}'.format(self.current_round , self.optimized_lineup, self.calculate_lineup_score(self.optimized_lineup))
+            logger.info('round: {} - lineup:{} - score:{}'.format(self.current_round , self.optimized_lineup, self.calculate_lineup_score(self.optimized_lineup)))
+
+        logger.info('Final Q Table: {}'.format(self.qtable))
         return self.optimized_lineup, self.calculate_lineup_score(self.optimized_lineup)
 
 if __name__ == '__main__':
@@ -218,6 +266,8 @@ if __name__ == '__main__':
         desired_lineup = ['PG', 'C', 'SG', 'Util']
     elif config['sport'] == 'nba':
         desired_lineup = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'Util']
+    elif config['sport'] == 'mlb':
+        desired_lineup = ['P', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF']
 
     logger.info('DK Salaries: ')
     logger.info(dk_data)
