@@ -34,13 +34,6 @@ class TestCreateDraft(TestCase):
                                                               'C|add_player': 1.0, 'SG|dont_add_player': 1.0,
                                                               'C|dont_add_player': 1.0, 'PG|add_player': 1.0}}, my_dict)
 
-    def test_execute_action(self):
-        player_name = 'LeBron James'
-        action = 'PG|dont_add_player'
-
-        value = self.my_draft.execute_action(player_name, action)
-        self.assertEquals(value, 0.0)
-
     def test_calculate_lineup_score(self):
         lineup = {'C': 'Kawhi Leonard', 'SG': 'DeMar DeRozan', 'PG': 'LeBron James'}
         score, _, _ = self.my_draft.calculate_lineup_score(lineup)
@@ -55,9 +48,16 @@ class TestCreateDraft(TestCase):
         reward = self.my_draft.calculate_reward(old_lineup, new_lineup)
         self.assertEquals(reward, -1255.6445000000003)
 
+    def test_execute_action(self):
+        player_name = 'LeBron James'
+        action = 'PG|dont_add_player'
+
+        value = self.my_draft.execute_action(player_name, action)
+        self.assertEquals(value, 0.0)
+
+    def test_check_player_in_temp_lineup(self):
+        self.fail()
+
     def tearDown(self):
         logging.disable(logging.NOTSET)
         config = self.old_config
-
-
-

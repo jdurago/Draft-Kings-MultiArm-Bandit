@@ -27,6 +27,14 @@ logger.addHandler(ch)
 DK_SALARIES_FILE = config['dk_salary_filename']
 
 # TODO update q table so that players only have states with eligible positions ie. Lebron James(SF) can't be a PG, this will speed up processing time
+# TODO add parallelization capability so multiple threads can be run to create multiple optimium drafts
+# TODO incorporate history of player scores, so that players are rewarded for winning consistently
+
+# TODO read template file to get desired lineup, eligible players, and player id
+# TODO have optimized draft output to csv file with player ids
+# TODO add scrapers for other websites, this additional data is unioned with dk_salaries data
+# TODO add banned players file to Input folder, players in this file should not be included in draft
+
 
 class CreateDraft():
     def __init__(self, dk_data, dk_lineup):
@@ -268,6 +276,8 @@ if __name__ == '__main__':
         desired_lineup = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'Util']
     elif config['sport'] == 'mlb':
         desired_lineup = ['P', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF']
+    elif config['sport'] == 'pga':
+        desired_lineup = ['G1', 'G2', 'G3', 'G4', 'G5', 'G6']
 
     logger.info('DK Salaries: ')
     logger.info(dk_data)
