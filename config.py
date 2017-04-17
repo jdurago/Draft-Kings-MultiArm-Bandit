@@ -9,9 +9,9 @@ config = {
         'learning_rounds': 100  ,# number of rounds to iterate through lineup
         'log_qtable': True,
         # below are config for genetic algorithm
-        'population_size': 10,
-        'select_top_individuals': 2,
-        'mutate_probability': 0.01,
-        'generations': 2  # number of generations to evolve
+        'population_size': 500,
+        'select_top_individuals': 20,
+        'mutate_probability': 0.1,
+        'generations': 500  # number of generations to evolve
 
     }
