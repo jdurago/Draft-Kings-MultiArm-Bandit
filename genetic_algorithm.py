@@ -5,6 +5,7 @@ import copy
 import numpy as np
 import random
 import itertools
+import csv
 
 import logging
 # create logger with __name__
@@ -12,7 +13,7 @@ logger = logging.getLogger('my_log')
 logger.setLevel(logging.DEBUG)
 # create file handler which logs even debug messages
 fh = logging.FileHandler('draft2.log')
-fh.setLevel(logging.DEBUG)
+fh.setLevel(logging.INFO)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
 ch.setLevel(logging.ERROR)
@@ -234,7 +235,7 @@ class Population:
         while self.generation_num < config['generations']:
 
             print 'Generation Number: {}, Best Fitness: {}'.format(self.generation_num, self.selection(1)[0].fitness)
-            logger.debug('Generation Number: {}, Best Fitness: {}'.format(self.generation_num, self.selection(1)[0].fitness))
+            logger.info('Generation Number: {}, Best Fitness: {}'.format(self.generation_num, self.selection(1)[0].fitness))
             # logger.debug('generation: {}, lineup: {}'.format(self.generation_num, [individual.lineup for individual in self.current_generation]))
             self.next_generation()
             self.generation_num += 1
@@ -260,11 +261,20 @@ if __name__ == '__main__':
 
     dk_data = import_draftkings_salaries(DK_SALARIES_FILE)
 
-    my_population = Population(dk_data, desired_lineup)
-    best_lineup = my_population.evolve()
+    with open('lineup_file.csv', 'w') as f:  # Just use 'w' mode in 3.x
+        w = csv.DictWriter(f, desired_lineup)
+        w.writeheader()
 
-    logger.debug('Best Lineup: {}, Fitness: {}'.format(best_lineup.lineup, best_lineup.fitness))
-    print('Best Lineup: {}, Fitness: {}'.format(best_lineup.lineup, best_lineup.fitness))
+    for lineup_count in range(config['number_of_lineups']):
+        my_population = Population(dk_data, desired_lineup)
+        best_lineup = my_population.evolve()
+        logger.info('Best Lineup: {}, Fitness: {}'.format(best_lineup.lineup, best_lineup.fitness))
+        print('Best Lineup: {}, Fitness: {}'.format(best_lineup.lineup, best_lineup.fitness))
+
+        with open('lineup_file.csv', 'a') as f:  # Just use 'w' mode in 3.x
+            w = csv.DictWriter(f, best_lineup.lineup.keys())
+            # w.writeheader()
+            w.writerow(best_lineup.lineup)
 
     # logger.info('DK Salaries: {}'.format(dk_data))
 
