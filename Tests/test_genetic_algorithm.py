@@ -149,7 +149,7 @@ class TestPopulation(TestCase):
         my_population = Population(self.dk_data, self.desired_lineup)
         crossover_point = 2
 
-        children = my_population.crossover(parent1, parent2, crossover_point)
+        children = my_population.crossover(parent1, parent2)
         for child in children:
             print child
 

@@ -56,18 +56,21 @@ class Individual:
         df = self.dk_data
 
         lineup = collections.OrderedDict()
-        for position in self.desired_lineup:
+        for position, dk_position_label in self.desired_lineup:
             # Util position can be any player
-            if position == 'Util':
-                random_player = df.sample(1).Name.values[0]
-                while check_player_in_lineup(lineup, random_player):
+            try:
+                if position == 'Util':
                     random_player = df.sample(1).Name.values[0]
-                lineup.update({position: random_player})
-            else:
-                random_player = df[df['Position'].str.contains(position)].sample(1).Name.values[0]
-                while check_player_in_lineup(lineup, random_player):
-                    random_player = df[df['Position'].str.contains(position)].sample(1).Name.values[0]
-                lineup.update({position: random_player})
+                    while check_player_in_lineup(lineup, random_player):
+                        random_player = df.sample(1).Name.values[0]
+                    lineup.update({position: random_player})
+                else:
+                    random_player = df[df['Position'].str.contains(dk_position_label)].sample(1).Name.values[0]
+                    while check_player_in_lineup(lineup, random_player):
+                        random_player = df[df['Position'].str.contains(dk_position_label)].sample(1).Name.values[0]
+                    lineup.update({position: random_player})
+            except ValueError:
+                raise ValueError('position not found in dk_salaries file: {}'.format(dk_position_label))
 
         return lineup
 
@@ -137,17 +140,18 @@ class Population:
 
         return child1, child2
 
-    def crossover(self, parent1, parent2, cross_over_point):
+    def crossover(self, parent1, parent2):
         """
         Perform crossover on N chromosomes selected.
         Return tuple of 2 Class Individual that are a crossover of the 2 parents
         """
 
         d = collections.OrderedDict()
-        for position in self.desired_lineup:
+        for position, dk_position_label in self.desired_lineup:
             d.update({position: []})
 
         for i, (key1, value1) in enumerate(parent1.lineup.iteritems()):
+            logger.debug('failing here because: {}'.format(parent1.lineup))
             d[key1].append(value1)
 
         for j, (key2, value2) in enumerate(parent2.lineup.iteritems()):
@@ -179,24 +183,27 @@ class Population:
 
         if rand_number < config['mutate_probability']:
             logger.debug('Mutated Child!')
-            random_position = random.sample(child.lineup, 1)
-            random_position = random_position[0]
-            logger.debug('random_position: {}'.format(random_position))
+            random_position = random.sample(self.desired_lineup, 1)
+            random_position_label = random_position[0][1]
+            random_position_key = random_position[0][0]
+
+            logger.debug('random_position_label: {}'.format(random_position_label))
             logger.debug('old_lineup: {}'.format(child.lineup))
 
-            if random_position == 'Util':
+
+            if random_position_label == 'Util':
                 random_player = df.sample(1).Name.values[0]
                 while check_player_in_lineup(child.lineup, random_player):
                     random_player = df.sample(1).Name.values[0]
-                child.lineup[random_position] = random_player
+                child.lineup[random_position_key] = random_player
             else:
-                random_player = df[df['Position'].str.contains(random_position)].sample(1).Name.values[0]
+                random_player = df[df['Position'].str.contains(random_position_label)].sample(1).Name.values[0]
                 while check_player_in_lineup(child.lineup, random_player):
-                    random_player = df[df['Position'].str.contains(random_position)].sample(1).Name.values[0]
-                child.lineup[random_position] = random_player
+                    random_player = df[df['Position'].str.contains(random_position_label)].sample(1).Name.values[0]
+                child.lineup[random_position_key] = random_player
 
             logger.debug('new_lineup: {}'.format(child.lineup))
-            logger.debug('mutated child - position: {} lineup: {}'.format(random_position, child.lineup))
+            logger.debug('mutated child - position: {} lineup: {}'.format(random_position_key, child.lineup))
 
         # update fitness of child
         child.get_fitness(child.lineup)
@@ -216,10 +223,10 @@ class Population:
             parent2 = top_population.pop()
 
             # create random cross over point
-            cross_over_point = random.randint(1, len(parent1.lineup)-2)
+            # cross_over_point = random.randint(1, len(parent1.lineup)-2)
             # logger.debug('cross_over_point: {}'.format(cross_over_point))
 
-            children = self.crossover(parent1, parent2, cross_over_point)
+            children = self.crossover(parent1, parent2)
             for child in children:
                 self.mutation(child)
                 new_population.append(child)
@@ -249,20 +256,22 @@ if __name__ == '__main__':
     logger.info('Script Start')
 
     if config['sport'] == 'debug':
-        desired_lineup = ['PG', 'C', 'SG', 'Util']
+        desired_lineup = [('PG', 'PG') , ('C', 'C') , ('SG', 'SG'), ('Util', 'Util')]
         DK_SALARIES_FILE = 'Input/DKSalaries_Debug.csv'
 
     elif config['sport'] == 'nba':
-        desired_lineup = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'Util']
+        desired_lineup = [('PG', 'PG'), ('SG', 'SG') , ('SF', 'SF'), ('PF', 'PF') , ('C', 'C') , ('G', 'G') , ('F', 'F'), ('Util', 'Util')]
     elif config['sport'] == 'mlb':
-        desired_lineup = ['P', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF']
+        desired_lineup = [('P1', 'P'), ('P2', 'P'), ('C','C'), ('1B', '1B') , ('2B', '2B'), ('3B', '3B'), ('SS', 'SS'), ('OF1', 'OF'), ('OF2', 'OF'), ('OF3', 'OF')]
     elif config['sport'] == 'pga':
-        desired_lineup = ['G1', 'G2', 'G3', 'G4', 'G5', 'G6']
+        desired_lineup = [('G1', 'G'), ('G2', 'G'), ('G3', 'G'), ('G4', 'G'), ('G5', 'G'), ('G6', 'G')]
+
+
 
     dk_data = import_draftkings_salaries(DK_SALARIES_FILE)
 
     with open('lineup_file.csv', 'w') as f:  # Just use 'w' mode in 3.x
-        w = csv.DictWriter(f, desired_lineup)
+        w = csv.DictWriter(f, [position[1] for position in desired_lineup])
         w.writeheader()
 
     for lineup_count in range(config['number_of_lineups']):
