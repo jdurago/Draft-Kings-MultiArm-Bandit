@@ -16,6 +16,10 @@ class TestIndividual(TestCase):
 
         self.old_config = config
         config['reward'] = {'AvgPointsPerGame': 0.5, 'Salary': 0.5}
+        config['population_size'] = 10
+        config['select_top_individuals'] = 2
+        config['mutate_probability'] = 0.1
+        config['generations'] = 2
 
         self.dk_data = import_draftkings_salaries(TESTDATA_FILENAME)
         self.desired_lineup = ['PG', 'C', 'SG', 'Util']
@@ -87,8 +91,40 @@ class TestPopulation(TestCase):
         # verify if my_population.selection() properly selects top individuals in current_generation
         for individual in my_population.current_generation:
             print individual.fitness, individual.lineup
-        self.assertEquals(len(my_population.selection()), config['select_top_individuals'])
+
+        # self.assertEquals(len(my_population.selection()), config['select_top_individuals'])
         self.assertEquals(type(my_population.selection()), list)
+
+    def test_crossover_old(self):
+
+        # Initialize parent 1 and set known lineup
+        parent1 = Individual(self.dk_data, self.desired_lineup)
+        d = collections.OrderedDict()
+        d['PG'] = 'Damian Lillard'
+        d['C'] = 'Dewayne Dedmon'
+        d['SG'] = 'DeMar DeRozan'
+        d['Util'] = 'Kawhi Leonard'
+        parent1.lineup = d
+
+        # Initialize parent 2 and set known lineup
+        parent2 = Individual(self.dk_data, self.desired_lineup)
+        d = collections.OrderedDict()
+        d['PG'] = 'John Wall'
+        d['C'] = 'Karl-Anthony Towns'
+        d['SG'] = 'James Jones'
+        d['Util'] = 'Kyrie Irving'
+        parent2.lineup = d
+
+        my_population = Population(self.dk_data, self.desired_lineup)
+        crossover_point = 2
+
+        child1, child2 = my_population.crossover_old(parent1, parent2, crossover_point)
+
+        assert_child1 = collections.OrderedDict([('PG', 'Damian Lillard'), ('C', 'Dewayne Dedmon'), ('SG', 'James Jones'), ('Util', 'Kyrie Irving')])
+        self.assertEquals(child1.lineup, assert_child1)
+
+        assert_child2 = collections.OrderedDict([('PG', 'John Wall'), ('C', 'Karl-Anthony Towns'), ('SG', 'DeMar DeRozan'), ('Util', 'Kawhi Leonard')])
+        self.assertEquals(child2.lineup, assert_child2)
 
     def test_crossover(self):
 
@@ -113,13 +149,12 @@ class TestPopulation(TestCase):
         my_population = Population(self.dk_data, self.desired_lineup)
         crossover_point = 2
 
-        child1, child2 = my_population.crossover(parent1, parent2, crossover_point)
+        children = my_population.crossover(parent1, parent2, crossover_point)
+        for child in children:
+            print child
 
-        assert_child1 = collections.OrderedDict([('PG', 'Damian Lillard'), ('C', 'Dewayne Dedmon'), ('SG', 'James Jones'), ('Util', 'Kyrie Irving')])
-        self.assertEquals(child1.lineup, assert_child1)
-
-        assert_child2 = collections.OrderedDict([('PG', 'John Wall'), ('C', 'Karl-Anthony Towns'), ('SG', 'DeMar DeRozan'), ('Util', 'Kawhi Leonard')])
-        self.assertEquals(child2.lineup, assert_child2)
+        assert_child1 = collections.OrderedDict([('PG', 'Damian Lillard'), ('C', 'Dewayne Dedmon'), ('SG', 'DeMar DeRozan'), ('Util', 'Kawhi Leonard')])
+        self.assertEquals(children[0].lineup, assert_child1)
 
     def test_mutation(self):
         # TODO assert actual value of lineup instead of type
@@ -137,13 +172,13 @@ class TestPopulation(TestCase):
 
         for individual in my_population.next_generation():
             print individual.lineup, individual.fitness
-        self.assertEquals(my_population.next_generation(),2)
+        self.assertEquals(type(my_population.next_generation()), list)
 
     def test_evolve(self):
 
         my_population = Population(self.dk_data, self.desired_lineup)
         top_indiviual = my_population.evolve()
-        self.assertEquals(top_indiviual.lineup, 2)
+        self.assertEquals(type(top_indiviual.lineup), collections.OrderedDict)
 
 
     def tearDown(self):

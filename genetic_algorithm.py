@@ -4,6 +4,7 @@ import collections
 import copy
 import numpy as np
 import random
+import itertools
 
 import logging
 # create logger with __name__
@@ -33,6 +34,8 @@ def check_player_in_lineup(lineup, player):
     else:
         return False
 
+def my_product(dicts):
+    return (collections.OrderedDict(itertools.izip(dicts, x)) for x in itertools.product(*dicts.itervalues()))
 
 class Individual:
 
@@ -112,7 +115,7 @@ class Population:
             selected_population.append(self.current_generation[id])
         return selected_population
 
-    def crossover(self, parent1, parent2, cross_over_point):
+    def crossover_old(self, parent1, parent2, cross_over_point):
         """
         Perform crossover on N chromosomes selected.
         Return tuple of 2 Class Individual that are a crossover of the 2 parents
@@ -132,6 +135,34 @@ class Population:
         child2.get_fitness(child2.lineup)
 
         return child1, child2
+
+    def crossover(self, parent1, parent2, cross_over_point):
+        """
+        Perform crossover on N chromosomes selected.
+        Return tuple of 2 Class Individual that are a crossover of the 2 parents
+        """
+
+        d = collections.OrderedDict()
+        for position in self.desired_lineup:
+            d.update({position: []})
+
+        for i, (key1, value1) in enumerate(parent1.lineup.iteritems()):
+            d[key1].append(value1)
+
+        for j, (key2, value2) in enumerate(parent2.lineup.iteritems()):
+            d[key2].append(value2)
+
+        children_lineup_dict = my_product(d)
+
+        # Updates fitness value of children
+        children = []
+        for child_lineup in children_lineup_dict:
+            child = copy.deepcopy(parent1)
+            child.lineup = child_lineup
+            child.get_fitness(child.lineup)
+            children.append(child)
+
+        return children
 
     def mutation(self, child, rand_value=None):
         """
@@ -187,14 +218,13 @@ class Population:
             cross_over_point = random.randint(1, len(parent1.lineup)-2)
             # logger.debug('cross_over_point: {}'.format(cross_over_point))
 
-            child1, child2 = self.crossover(parent1, parent2, cross_over_point)
-            child1 = self.mutation(child1)
-            child2 = self.mutation(child2)
+            children = self.crossover(parent1, parent2, cross_over_point)
+            for child in children:
+                self.mutation(child)
+                new_population.append(child)
 
             new_population.append(parent1)
             new_population.append(parent2)
-            new_population.append(child1)
-            new_population.append(child2)
 
         logger.debug('New Population Size: {}'.format(len(new_population)))
         self.current_generation = new_population
