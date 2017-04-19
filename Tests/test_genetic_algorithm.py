@@ -22,7 +22,7 @@ class TestIndividual(TestCase):
         config['generations'] = 2
 
         self.dk_data = import_draftkings_salaries(TESTDATA_FILENAME)
-        self.desired_lineup = ['PG', 'C', 'SG', 'Util']
+        self.desired_lineup = [('PG', 'PG'), ('C', 'C'), ('SG', 'SG'), ('Util', 'Util')]
 
     def test_check_player_in_lineup_True(self):
 
@@ -74,7 +74,7 @@ class TestPopulation(TestCase):
         config['reward'] = {'AvgPointsPerGame': 0.5, 'Salary': 0.5}
 
         self.dk_data = import_draftkings_salaries(TESTDATA_FILENAME)
-        self.desired_lineup = ['PG', 'C', 'SG', 'Util']
+        self.desired_lineup = [('PG', 'PG'), ('C', 'C'), ('SG', 'SG'), ('Util', 'Util')]
 
     def test_initialize_population(self):
         # TODO assert actual value of lineup instead of type
@@ -150,8 +150,6 @@ class TestPopulation(TestCase):
         crossover_point = 2
 
         children = my_population.crossover(parent1, parent2)
-        for child in children:
-            print child
 
         assert_child1 = collections.OrderedDict([('PG', 'Damian Lillard'), ('C', 'Dewayne Dedmon'), ('SG', 'DeMar DeRozan'), ('Util', 'Kawhi Leonard')])
         self.assertEquals(children[0].lineup, assert_child1)
@@ -170,8 +168,6 @@ class TestPopulation(TestCase):
         my_population = Population(self.dk_data, self.desired_lineup)
         my_population.next_generation()
 
-        for individual in my_population.next_generation():
-            print individual.lineup, individual.fitness
         self.assertEquals(type(my_population.next_generation()), list)
 
     def test_evolve(self):

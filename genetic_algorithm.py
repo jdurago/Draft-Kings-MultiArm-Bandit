@@ -6,6 +6,7 @@ import numpy as np
 import random
 import itertools
 import csv
+from Scraper import scrape
 
 import logging
 # create logger with __name__
@@ -27,6 +28,7 @@ logger.addHandler(ch)
 
 
 DK_SALARIES_FILE = config['dk_salary_filename']
+OUTPUT_FILE = 'lineup_file.csv'
 
 
 def check_player_in_lineup(lineup, player):
@@ -34,6 +36,7 @@ def check_player_in_lineup(lineup, player):
         return True
     else:
         return False
+
 
 def my_product(dicts):
     return (collections.OrderedDict(itertools.izip(dicts, x)) for x in itertools.product(*dicts.itervalues()))
@@ -190,7 +193,6 @@ class Population:
             logger.debug('random_position_label: {}'.format(random_position_label))
             logger.debug('old_lineup: {}'.format(child.lineup))
 
-
             if random_position_label == 'Util':
                 random_player = df.sample(1).Name.values[0]
                 while check_player_in_lineup(child.lineup, random_player):
@@ -255,6 +257,8 @@ if __name__ == '__main__':
     logger.info('___________')
     logger.info('Script Start')
 
+    dk_data = import_draftkings_salaries(DK_SALARIES_FILE)
+
     if config['sport'] == 'debug':
         desired_lineup = [('PG', 'PG') , ('C', 'C') , ('SG', 'SG'), ('Util', 'Util')]
         DK_SALARIES_FILE = 'Input/DKSalaries_Debug.csv'
@@ -263,14 +267,13 @@ if __name__ == '__main__':
         desired_lineup = [('PG', 'PG'), ('SG', 'SG') , ('SF', 'SF'), ('PF', 'PF') , ('C', 'C') , ('G', 'G') , ('F', 'F'), ('Util', 'Util')]
     elif config['sport'] == 'mlb':
         desired_lineup = [('P1', 'P'), ('P2', 'P'), ('C','C'), ('1B', '1B') , ('2B', '2B'), ('3B', '3B'), ('SS', 'SS'), ('OF1', 'OF'), ('OF2', 'OF'), ('OF3', 'OF')]
+        starting_lineup = scrape('mlb_rotogrinders')
     elif config['sport'] == 'pga':
         desired_lineup = [('G1', 'G'), ('G2', 'G'), ('G3', 'G'), ('G4', 'G'), ('G5', 'G'), ('G6', 'G')]
 
+    dk_data = dk_data[dk_data["Name"].isin(starting_lineup["Name"])] # filter out players that are not in starting lineup
 
-
-    dk_data = import_draftkings_salaries(DK_SALARIES_FILE)
-
-    with open('lineup_file.csv', 'w') as f:  # Just use 'w' mode in 3.x
+    with open(OUTPUT_FILE, 'w') as f:  # Just use 'w' mode in 3.x
         w = csv.DictWriter(f, [position[1] for position in desired_lineup])
         w.writeheader()
 
@@ -280,7 +283,7 @@ if __name__ == '__main__':
         logger.info('Best Lineup: {}, Fitness: {}'.format(best_lineup.lineup, best_lineup.fitness))
         print('Best Lineup: {}, Fitness: {}'.format(best_lineup.lineup, best_lineup.fitness))
 
-        with open('lineup_file.csv', 'a') as f:  # Just use 'w' mode in 3.x
+        with open(OUTPUT_FILE, 'a') as f:  # Just use 'w' mode in 3.x
             w = csv.DictWriter(f, best_lineup.lineup.keys())
             # w.writeheader()
             w.writerow(best_lineup.lineup)
